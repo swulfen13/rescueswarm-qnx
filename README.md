@@ -20,9 +20,9 @@ physics simulation of the swarm.
 | AI policy ported to C (119,819 weights, attention network) | **5,100 / 5,100** decisions identical to PyTorch |
 | AI + safety guard, whole swarm (20 drones) per control step | **~1.1 ms** median, 1.8 ms max (step = 100 ms) |
 | Round trip PC → QNX → PC | **~1.6 ms** median, 2.2 ms 99th percentile |
-| Controller process killed / crashed (SIGTERM, SIGSEGV) | watchdog restarts it in **0.6–1.8 ms**, swarm loses **1 control step** (hovers safely), 0 missed steps |
+| Controller process killed / crashed (SIGTERM, SIGSEGV) | watchdog restarts it in **0.4–1.8 ms**, swarm loses **1 control step** (hovers safely), 0 missed steps |
 | Gateway process killed | restarted in **1.4 ms**, **0** missed steps |
-| AI **without** safety guard (15 min mission) | swarm drains its batteries together – **all drones down after 10 min, 0 % coverage** |
+| AI **without** safety guard (15 min mission, deployed policy) | swarm drains its batteries together – **all drones down within 12 min** (11.5 min, `out/guardv2_ohne_waechter_seed0.csv`; original policy: 10 min) |
 | AI **with** QNX safety guard (same seed) | **16 of 16 drones still flying after 15 min**, coverage stable (guard v2) |
 | Network delivered by the swarm (3 scenarios, 15 min each) | **92–100 % of the sites online**, the single uplink used at **100 %** of its capacity |
 | **City scenario** (4×4 km, 3 uplinks, relay chains needed), 4 seeds × 15 min on QNX | demand served **62 % on average (up to 73 %)** vs. 46 % before – city-trained AI + QNX link guard; every drone that started is still flying in 3 of 4 runs |
