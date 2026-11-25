@@ -151,11 +151,12 @@ powershell -File pc\test_last.ps1        # full swarm loop during CPU hog, norma
   (“NEM” mode, because WSL/Docker are enabled). Timer jitter inside the guest is therefore
   dominated by the hypervisor (milliseconds), not by QNX. Control-step computation times
   (~1 ms) are measured with `ClockCycles()` inside QNX and are not affected by this.
-  Clean jitter numbers need real hardware (e.g. Raspberry Pi 5) – planned next.
+  All measurements in this project come from this VM – no physical QNX hardware was used.
+  The relative effect of QNX priorities is clearly visible, absolute jitter would be lower on bare metal.
   A multi-core guest (`--cpu=4`) froze completely under the CPU-saturation test, so the VM runs single-core.
 
 ## What's next
-* Run on a Raspberry Pi 5 with QNX 8.0 and measure real-time behaviour on bare metal
+* Bare-metal QNX target (e.g. Raspberry Pi 5) for clean jitter numbers
 * Wind-aware mission planning: keep drones upwind of a charger, ground the swarm when wind > thrust
 * Retrain with the guard in the loop on more seeds / longer (first attempt: no clear gain)
 * One controller process per drone + adaptive partitioning to guarantee CPU budgets
