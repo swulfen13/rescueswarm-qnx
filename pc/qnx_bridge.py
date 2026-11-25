@@ -63,6 +63,19 @@ def pack_obs(seq: int, obs: dict, reserve: float, diag: float) -> tuple[bytes, i
     return hdr + rows.tobytes(), n
 
 
+def network_metrics(env) -> dict:
+    """Engpass sichtbar machen: Die Hotspots wollen viel mehr Daten, als der eine Uplink schafft.
+    uplink_pct = wie voll der Schwarm den Uplink nutzt, linked_pct = Anteil der Hotspots mit Netz."""
+    _, connected, cap = env._connectivity()
+    _, delivered, hole, _ = env._serve(connected, cap)
+    act = env.hs_active[0]
+    up = float(env.U * env.uplink_cap)
+    return {
+        "uplink_pct": 100.0 * delivered[0].sum().item() / max(up, 1e-6),
+        "linked_pct": 100.0 * (1.0 - (hole[0] & act).sum().item() / max(act.sum().item(), 1)),
+    }
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     ip_file = Path(__file__).resolve().parents[1] / "vm_ip.txt"
@@ -102,7 +115,7 @@ def main() -> None:
         writer = csv.writer(fcsv)
         writer.writerow(["step", "served_pct", "alive_frac", "mean_battery", "charging_now",
                          "qnx_charging", "overrides", "compute_us", "qnx_roundtrip_us",
-                         "pc_roundtrip_ms", "fallback", "missed"])
+                         "pc_roundtrip_ms", "fallback", "missed", "uplink_pct", "linked_pct"])
 
     obs = env.reset()
     missed = fallbacks = 0
@@ -147,6 +160,7 @@ def main() -> None:
 
         act_t = torch.as_tensor(actions[: env.A], dtype=torch.long).unsqueeze(0)
         obs, _, _, info = env.step(act_t)
+        info.update(network_metrics(env))
         served_hist.append(info["served_pct"])
         if view is not None:
             view.update(step, info, actions, compute_us, rtt_ms, bool(flags & FLAG_FALLBACK), n_ov)
@@ -155,7 +169,8 @@ def main() -> None:
             writer.writerow([step, f"{info['served_pct']:.2f}", f"{info['alive_frac']:.3f}",
                              f"{info['mean_battery']:.1f}", f"{info['charging_now']:.0f}",
                              n_chg, n_ov, compute_us, qnx_rt, f"{rtt_ms:.2f}",
-                             int(bool(flags & FLAG_FALLBACK)), int(not got)])
+                             int(bool(flags & FLAG_FALLBACK)), int(not got),
+                             f"{info['uplink_pct']:.1f}", f"{info['linked_pct']:.1f}"])
 
         if step % 50 == 0 or step == args.steps:
             last = served_hist[-50:]

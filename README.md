@@ -24,6 +24,7 @@ physics simulation of the swarm.
 | Gateway process killed | restarted in **1.4 ms**, **0** missed steps |
 | AI **without** safety guard (15 min mission) | swarm drains its batteries together – **all drones down after 10 min, 0 % coverage** |
 | AI **with** QNX safety guard (same seed) | **16 of 16 drones still flying after 15 min**, coverage stable (guard v2) |
+| Network delivered by the swarm (3 scenarios, 15 min each) | **92–100 % of the sites online**, the single uplink used at **100 %** of its capacity |
 | Guard v2 (wind-compensated) vs. v1 (straight line), 4 seeds on QNX | more drones survive in calm/moderate wind (16 vs 14, 14 vs 11); no guard can help when the wind is stronger than the drones (see notes) |
 | 100 Hz control loop vs. CPU hog, **normal** priority | median **392 ms** late, max 764 ms |
 | 100 Hz control loop vs. CPU hog, **SCHED_FIFO 50** | median **4.2 ms** late, max 27 ms (VM floor, see notes) |
@@ -108,7 +109,8 @@ SSH to the VM needs `-o Ciphers=aes128-ctr -o MACs=hmac-sha2-256` (VirtualBox NI
 
 ### 2. Build and deploy the QNX side
 ```powershell
-python pc\export_policy.py <swarm-sim>\checkpoints\netcov_final.pt qnx\policy.bin
+# qnx\policy.bin is included (policy retrained with guard v2). To export your own checkpoint:
+python pc\export_policy.py training\checkpoints\<run>_best.pt qnx\policy.bin
 tools\qnx.bat bash qnx/build.sh                     # qcc → qnx/bin/{watchdog,controller,gateway,rtbench,hog}
 powershell -File qnx\deploy.ps1                     # copies to /tmp/rs and starts the watchdog
 #   -Mode ki | ki-ohne (AI without guard) | regeln (rules)    -Prio 0 (no real-time priority)
@@ -138,14 +140,15 @@ powershell -File pc\test_last.ps1        # full swarm loop during CPU hog, norma
 * **Prior work:** the simulation and the training code (swarm-sim) existed before the hackathon.
   Everything in this repository – the QNX side, the C port of the policy, the safety guard,
   the watchdog, the bridge, the tests and the live view – was built during the hackathon period.
-* **Coverage is low (~14 %)** with the current policy, with or without the guard. The guard fixes
-  *survival*, not *placement*. Retraining the policy with the guard in the loop
-  (`training/train_with_guard.py`, 3000 PPO updates) did **not** clearly beat the original policy on
-  QNX (4 seeds: 13.5 vs 13.4 %, 6.9 vs 7.3 %, 17.7 vs 18.4 %, 3.7 vs 3.0 %), so the original policy stays.
-  A second, longer run with guard v2 in the loop (9000 updates) keeps **more drones alive**
-  (seed 2: 20/20 instead of 14/20, mean battery 72 % instead of 45 %) but covers about the same area
-  (14.2 vs 13.7 %, 16.9 vs 18.3 %). Survival is the guard's job, coverage was the goal of retraining –
-  so the original policy stays for now (`qnx/policy_guardv2.bin` is not in the repo, the CSVs are in `out/`).
+* **"Served demand" looks low (~14 %) – but the bottleneck is the uplink, not the swarm.** In the
+  hardest scenario the sites ask for ~1,200–1,400 capacity units, while the single uplink carries 200.
+  The swarm keeps 92–100 % of the sites connected and uses the uplink at 100 % (`training/uplink_use.py`).
+  More drones or a better policy cannot raise that number; only more uplinks (or priority-based
+  bandwidth allocation in the network, which the simulation splits evenly) could.
+  Retraining with the guard in the loop therefore did not improve served demand (first run, 3000
+  updates: 13.5 vs 13.4 %, 6.9 vs 7.3 %, 17.7 vs 18.4 %, 3.7 vs 3.0 % on 4 seeds). A second run with
+  guard v2 (9000 updates) kept **more drones alive** (seed 2: 20/20 instead of 14/20, mean battery
+  72 % instead of 45 %) at the same served demand – **this policy is the one deployed now.**
 * **Strong wind is not survivable in this simulation.** Wind acts as an acceleration of up to
   10 m/s² at the hardest stage, the drones can only push with 5 m/s². When the wind is stronger than
   the drone, a station upwind cannot be reached by any controller – in 2 of 4 test seeds

@@ -48,18 +48,22 @@ class LiveView:
         m = self.ax_map
         m.set_xlim(0, W); m.set_ylim(0, H); m.set_aspect("equal")
         m.set_xticks([]); m.set_yticks([])
-        self.links = LineCollection([], colors="#4fc3f7", linewidths=0.6, alpha=0.35, zorder=2)
+        self.links = LineCollection([], colors="#4fc3f7", linewidths=1.4, alpha=0.8, zorder=2)
         m.add_collection(self.links)
         self.sc_hs = m.scatter([], [], s=[], zorder=3)
         self.sc_st = m.scatter([], [], marker="s", s=200, c="#90caf9", edgecolors="white", zorder=4)
         self.sc_up = m.scatter([], [], marker="*", s=600, c="gold", edgecolors="black", zorder=5)
         self.sc_dr = m.scatter([], [], s=60, zorder=6, edgecolors="black", linewidths=0.5)
-        self.title = m.set_title("", color="white", fontsize=12, loc="left")
+        self.title = m.set_title("", color="white", fontsize=10, loc="left")
+        m.text(0.99, 0.99, "★ uplink   ■ charger   ● sites (size = demand)   • drones (colour = battery)\n"
+               "lines = radio path to the uplink", transform=m.transAxes, ha="right", va="top",
+               color="#b0bec5", fontsize=8)
         self.badge = m.text(0.01, 0.01, "", transform=m.transAxes, color="white", fontsize=10,
                             bbox=dict(facecolor="#2e7d32", edgecolor="none", boxstyle="round,pad=0.4"))
 
         self.t = deque(maxlen=history)
         self.srv = deque(maxlen=history)
+        self.upl = deque(maxlen=history)
         self.alive = deque(maxlen=history)
         self.cpu = deque(maxlen=history)
         self.fb = deque(maxlen=history)
@@ -71,30 +75,37 @@ class LiveView:
             if ylim:
                 ax.set_ylim(*ylim)
             return ln
-        self.l_srv = mk(self.ax_srv, "Versorgte Nachfrage (%)", "#66bb6a", (0, 100))
-        self.l_alive = mk(self.ax_alive, "Drohnen in der Luft", "#4fc3f7", (0, env.A + 1))
-        self.l_cpu = mk(self.ax_cpu, "QNX: Rechenzeit KI + Waechter pro Takt (ms)  |  Takt = 100 ms", "#ffca28")
-        self.l_fb = mk(self.ax_evt, "Notbetrieb (controller weg) / Waechter-Eingriffe", "#ef5350")
+        self.l_srv = mk(self.ax_srv, "Sites online (blue) · uplink capacity used (green), %", "#4fc3f7", (0, 105))
+        (self.l_upl,) = self.ax_srv.plot([], [], color="#66bb6a", lw=1.4)
+        self.l_alive = mk(self.ax_alive, "Drones in the air", "#4fc3f7", (0, env.A + 1))
+        self.l_cpu = mk(self.ax_cpu, "QNX: AI + safety guard per control step (ms)  ·  step = 100 ms", "#ffca28")
+        self.l_fb = mk(self.ax_evt, "Fail-safe hover (controller down) / safety-guard overrides", "#ef5350")
         (self.l_ov,) = self.ax_evt.plot([], [], color="#ab47bc", lw=1.0)
-        self.fig.suptitle("RescueSwarm  ·  Schwarm-KI auf QNX 8.0", color="white", fontsize=14, x=0.02, ha="left")
+        self.fig.suptitle("RescueSwarm  ·  swarm AI on QNX 8.0", color="white", fontsize=14, x=0.02, ha="left")
 
     def _links(self, pos, alive, up, radius):
-        segs = []
-        idx = np.where(alive)[0]
-        for a, i in enumerate(idx):
-            for u in range(up.shape[0]):
-                if np.linalg.norm(pos[i, :2] - up[u]) <= radius:
-                    segs.append([pos[i, :2], up[u]])
-            for j in idx[a + 1:]:
-                if np.linalg.norm(pos[i, :2] - pos[j, :2]) <= radius:
-                    segs.append([pos[i, :2], pos[j, :2]])
-        return segs
+        """Nur den Funkbaum zeichnen: jede Drohne mit ihrem naechsten Schritt Richtung Uplink (BFS)."""
+        idx = [int(i) for i in np.where(alive)[0]]
+        nodes = [up[u] for u in range(up.shape[0])] + [pos[i, :2] for i in idx]
+        n_up = up.shape[0]
+        parent = {u: None for u in range(n_up)}
+        frontier = list(range(n_up))
+        while frontier:
+            nxt = []
+            for a in frontier:
+                for b in range(n_up, len(nodes)):
+                    if b not in parent and np.linalg.norm(nodes[a] - nodes[b]) <= radius:
+                        parent[b] = a
+                        nxt.append(b)
+            frontier = nxt
+        return [[nodes[b], nodes[a]] for b, a in parent.items() if a is not None]
 
     def update(self, step, info, actions, compute_us, rtt_ms, fallback, overrides):
         e = self.env
         tmin = step * e.dt / 60.0
         self.t.append(tmin)
-        self.srv.append(info["served_pct"])
+        self.srv.append(info.get("linked_pct", info["served_pct"]))
+        self.upl.append(info.get("uplink_pct", 0.0))
         self.alive.append(float(e.alive[0].sum()))
         self.cpu.append(compute_us / 1000.0)
         self.fb.append(1.0 if fallback else 0.0)
@@ -125,17 +136,18 @@ class LiveView:
         if len(p):
             b = batt[alive]
             self.sc_dr.set_facecolor(self.plt.cm.RdYlGn(np.clip(b, 0, 1)))
-        self.title.set_text(f"t = {tmin:5.1f} min   |   versorgt {info['served_pct']:4.1f} %   |   "
-                            f"in der Luft {int(alive.sum())}   |   Akku Ø {info['mean_battery']:4.0f} %")
+        self.title.set_text(f"t = {tmin:5.1f} min   |   sites online {info.get('linked_pct', 0):3.0f} %   |   "
+                            f"uplink used {info.get('uplink_pct', 0):3.0f} %   |   drones {int(alive.sum())}")
         if fallback:
-            self.badge.set_text("QNX: controller neu gestartet – Schwarm schwebt (Notbetrieb)")
+            self.badge.set_text("QNX: controller restarting – swarm holds position (fail-safe)")
             self.badge.get_bbox_patch().set_facecolor("#c62828")
         else:
-            self.badge.set_text(f"QNX: KI {compute_us/1000:.2f} ms  ·  Rundweg {rtt_ms:.1f} ms  ·  Waechter-Eingriffe {overrides}")
+            self.badge.set_text(f"QNX: AI {compute_us/1000:.2f} ms  ·  round trip {rtt_ms:.1f} ms  ·  guard overrides {overrides}")
             self.badge.get_bbox_patch().set_facecolor("#2e7d32")
 
         t = list(self.t)
-        for ln, data, ax in ((self.l_srv, self.srv, self.ax_srv), (self.l_alive, self.alive, self.ax_alive),
+        for ln, data, ax in ((self.l_srv, self.srv, self.ax_srv), (self.l_upl, self.upl, self.ax_srv),
+                             (self.l_alive, self.alive, self.ax_alive),
                              (self.l_cpu, self.cpu, self.ax_cpu), (self.l_fb, self.fb, self.ax_evt),
                              (self.l_ov, self.ov, self.ax_evt)):
             ln.set_data(t, list(data))
