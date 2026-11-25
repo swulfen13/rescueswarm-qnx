@@ -112,7 +112,8 @@ def train(args):
         print(f"Start von {args.resume}")
     opt = torch.optim.Adam(net.parameters(), lr=tcfg.lr)
     team_row = env.agent_team_index().to(dev)
-    guard = Guard(env.E, env.A, env.reserve_pct / 100.0, math.hypot(env.map_w, env.map_h), dev)
+    guard = Guard(env.E, env.A, env.reserve_pct / 100.0, math.hypot(env.map_w, env.map_h), dev,
+                  steer=args.steer)
 
     E, A, T, R = env.E, env.A, env.T, tcfg.rollout_len
     ckpt_dir = HERE / "checkpoints"
@@ -210,11 +211,11 @@ def train(args):
             avg = sum(served_hist) / len(served_hist)
             if len(served_hist) == served_hist.maxlen and avg > best:
                 best = avg
-                torch.save(net.state_dict(), ckpt_dir / "guard_best.pt")
+                torch.save(net.state_dict(), ckpt_dir / f"{args.name}_best.pt")
             if update % 100 == 0:
-                torch.save(net.state_dict(), ckpt_dir / f"guard_update{update}.pt")
-        torch.save(net.state_dict(), ckpt_dir / "guard_final.pt")
-        print(f"Fertig. Bestes 25er-Mittel: {best:.1f}%  ->  checkpoints/guard_best.pt")
+                torch.save(net.state_dict(), ckpt_dir / f"{args.name}_update{update}.pt")
+        torch.save(net.state_dict(), ckpt_dir / f"{args.name}_final.pt")
+        print(f"Fertig. Bestes 25er-Mittel: {best:.1f}%  ->  checkpoints/{args.name}_best.pt")
 
 
 def main():
@@ -226,6 +227,7 @@ def main():
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--name", default=f"guard_{int(time.time())}")
     p.add_argument("--cpu", action="store_true")
+    p.add_argument("--steer", default="v2", choices=["v1", "v2"], help="Waechter-Steuerung wie im controller (v2 = wind-kompensiert)")
     train(p.parse_args())
 
 

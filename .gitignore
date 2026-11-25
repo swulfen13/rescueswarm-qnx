@@ -12,3 +12,4 @@ training/runs/
 training/*.log
 qnx/policy_netcov.bin
 qnx/policy_guard.bin
+training/train_tag*.log
