@@ -12,6 +12,8 @@ import numpy as np
 OBS_HDR = struct.Struct("<IIHHff3f")
 ACT_HDR = struct.Struct("<IIHHIIHH")
 C_ALIVE, C_ALT, C_ST_DX, C_ST_DY, C_ST_D, C_GAP_DX, C_GAP_DY, C_GAP_D, C_BATT = 0, 3, 11, 12, 13, 14, 15, 16, 17
+C_VX, C_VY, C_WIND_X, C_WIND_Y = 4, 5, 19, 20
+V_MAX, A_MAX, STEER_TAU, APPROACH_GAIN, APPROACH_OFFSET_M = 15.0, 5.0, 1.5, 0.3, 40.0
 charging = np.zeros(32, dtype=bool)
 
 
@@ -20,6 +22,20 @@ def dir_to_action(dx, dy):
         return 0
     k = int(round(math.atan2(dy, dx) / (math.pi / 4))) % 8
     return 1 + k
+
+
+def steer_to_station(r, diag):
+    """Wie steer_to_station() in qnx/controller.c (Waechter v2, wind-kompensiert)."""
+    speed = min(max((r[C_ST_D] * diag - APPROACH_OFFSET_M) * APPROACH_GAIN, 0.0), V_MAX)
+    ax = (r[C_ST_DX] * speed - r[C_VX] * V_MAX) / STEER_TAU - r[C_WIND_X] * V_MAX
+    ay = (r[C_ST_DY] * speed - r[C_VY] * V_MAX) / STEER_TAU - r[C_WIND_Y] * V_MAX
+    best, best_e = 0, ax * ax + ay * ay
+    for k in range(8):
+        c, s = math.cos(math.pi * k / 4) * A_MAX, math.sin(math.pi * k / 4) * A_MAX
+        e = (ax - c) ** 2 + (ay - s) ** 2
+        if e < best_e:
+            best, best_e = 1 + k, e
+    return best
 
 
 def control(rows, reserve, diag, net=None, safety=True):
@@ -62,7 +78,7 @@ def control(rows, reserve, diag, net=None, safety=True):
     ov = 0
     for i in range(n):
         if alive[i] and charging[i]:
-            a = 0 if rows[i, C_ST_D] * diag < 100 else dir_to_action(rows[i, C_ST_DX], rows[i, C_ST_DY])
+            a = steer_to_station(rows[i], diag)
             ov += int(a != act[i])
             act[i] = a
     return act, int(charging[:n].sum()), ov

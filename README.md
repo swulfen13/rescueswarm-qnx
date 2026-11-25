@@ -23,7 +23,8 @@ physics simulation of the swarm.
 | Controller process killed / crashed (SIGTERM, SIGSEGV) | watchdog restarts it in **0.6–1.8 ms**, swarm loses **1 control step** (hovers safely), 0 missed steps |
 | Gateway process killed | restarted in **1.4 ms**, **0** missed steps |
 | AI **without** safety guard (15 min mission) | swarm drains its batteries together – **all drones down after 10 min, 0 % coverage** |
-| AI **with** QNX safety guard (same seed) | **70–80 % of drones still flying after 15 min**, coverage stable |
+| AI **with** QNX safety guard (same seed) | **16 of 16 drones still flying after 15 min**, coverage stable (guard v2) |
+| Guard v2 (wind-compensated) vs. v1 (straight line), 4 seeds on QNX | more drones survive in calm/moderate wind (16 vs 14, 14 vs 11); no guard can help when the wind is stronger than the drones (see notes) |
 | 100 Hz control loop vs. CPU hog, **normal** priority | median **392 ms** late, max 764 ms |
 | 100 Hz control loop vs. CPU hog, **SCHED_FIFO 50** | median **4.2 ms** late, max 27 ms (VM floor, see notes) |
 | Full swarm loop at 10 Hz during 20 s CPU hog, normal priority | round trip median 12.6 ms, 99 % 39 ms |
@@ -78,7 +79,12 @@ sits between the AI and the drones:
 
 * below the battery reserve a drone **must** return to charge – the AI is overridden,
 * charging slots are handed out to the lowest batteries first,
-* **never more than 30 % of the swarm charges at the same time.**
+* **never more than 30 % of the swarm charges at the same time,**
+* the flight to the station is **wind-compensated** (guard v2): the guard picks the thrust direction
+  that brings the drone's velocity closest to "towards the station, slowing down on arrival",
+  minus the wind. The first version (v1) flew a straight line and "hovered" at the station –
+  but hovering keeps the current velocity, so drones overshot or were blown away and died
+  next to the charger.
 
 The AI stays fast and flexible, the safety rules stay simple, verifiable and real-time.
 
@@ -117,6 +123,8 @@ python pc\qnx_bridge.py --steps 9000 --csv out\run.csv      # as fast as possibl
 ### 4. Tests
 ```powershell
 powershell -File pc\vergleich.ps1        # AI with vs. without safety guard (same seed)
+powershell -File pc\vergleich_waechter_v2.ps1   # guard v2 on seeds 0-3 (compare with v1 CSVs in out/)
+powershell -File pc\vergleich_policies.ps1      # original policy vs. policy retrained with the guard
 powershell -File pc\test_watchdog.ps1    # kills controller twice and gateway once during a 10 Hz run
 powershell -File pc\test_echtzeit.ps1    # 100 Hz loop vs. CPU hog: no load / normal prio / SCHED_FIFO
 powershell -File pc\test_last.ps1        # full swarm loop during CPU hog, normal vs. FIFO priority
@@ -131,7 +139,14 @@ powershell -File pc\test_last.ps1        # full swarm loop during CPU hog, norma
   Everything in this repository – the QNX side, the C port of the policy, the safety guard,
   the watchdog, the bridge, the tests and the live view – was built during the hackathon period.
 * **Coverage is low (~14 %)** with the current policy, with or without the guard. The guard fixes
-  *survival*, not *placement*. Next step: retrain the policy with the guard inside the simulation.
+  *survival*, not *placement*. Retraining the policy with the guard in the loop
+  (`training/train_with_guard.py`, 3000 PPO updates) did **not** clearly beat the original policy on
+  QNX (4 seeds: 13.5 vs 13.4 %, 6.9 vs 7.3 %, 17.7 vs 18.4 %, 3.7 vs 3.0 %), so the original policy stays.
+* **Strong wind is not survivable in this simulation.** Wind acts as an acceleration of up to
+  10 m/s² at the hardest stage, the drones can only push with 5 m/s². When the wind is stronger than
+  the drone, a station upwind cannot be reached by any controller – in 2 of 4 test seeds
+  (wind 5.0 and 5.9) all drones are lost with guard v1 and v2 alike. A real system would need to
+  keep drones upwind of a station or ground the swarm; that is mission planning, not a guard rule.
 * **Timing jitter in a VM:** on the development PC, VirtualBox runs on top of Hyper-V
   (“NEM” mode, because WSL/Docker are enabled). Timer jitter inside the guest is therefore
   dominated by the hypervisor (milliseconds), not by QNX. Control-step computation times
@@ -141,7 +156,8 @@ powershell -File pc\test_last.ps1        # full swarm loop during CPU hog, norma
 
 ## What's next
 * Run on a Raspberry Pi 5 with QNX 8.0 and measure real-time behaviour on bare metal
-* Retrain the policy with the safety guard in the loop
+* Wind-aware mission planning: keep drones upwind of a charger, ground the swarm when wind > thrust
+* Retrain with the guard in the loop on more seeds / longer (first attempt: no clear gain)
 * One controller process per drone + adaptive partitioning to guarantee CPU budgets
 * Use QNX SLM (System Launch and Monitor) instead of the self-written watchdog
 

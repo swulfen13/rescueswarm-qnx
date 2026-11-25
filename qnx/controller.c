@@ -43,9 +43,15 @@ typedef union {
 #define CHARGE_START_MARGIN 0.15f   /* ab reserve + 15 % darf geladen werden          */
 #define CHARGE_DONE         0.95f   /* bis 95 % laden                                   */
 #define MAX_CHARGING_FRAC   0.30f   /* hoechstens 30 % des Schwarms laden gleichzeitig  */
-#define HOLD_STATION_M      100.0f  /* naeher als 100 m an der Station: schweben (Laderadius 150 m) */
+#define HOLD_STATION_M      100.0f  /* nur noch v1 (alt): naeher als 100 m an der Station schweben */
 #define HOLD_GAP_M          120.0f  /* naeher als 120 m am Hotspot: schweben und versorgen */
 #define MIN_ALT_N           0.25f   /* unter 25 % der erlaubten Hoehe: steigen */
+/* Wind-kompensierte Lade-Steuerung (v2). Drohnen-Grenzen wie in netzabdeckung_config.yaml. */
+#define V_MAX               15.0f   /* m/s,  drone.max_geschwindigkeit_ms   */
+#define A_MAX               5.0f    /* m/s2, drone.max_beschleunigung_ms2   */
+#define STEER_TAU           1.5f    /* s, wie schnell die Wunschgeschwindigkeit erreicht werden soll */
+#define APPROACH_GAIN       0.3f    /* Wunschtempo = (Distanz - 40 m) * 0.3, max V_MAX */
+#define APPROACH_OFFSET_M   40.0f
 
 static uint8_t charging_state[RS_MAX_AGENTS];   /* 1 = Waechter schickt Drohne zum Laden */
 
@@ -70,6 +76,29 @@ static uint8_t flight_logic(const float *row, float diag)
 }
 
 /* Schicht 2: Sicherheits-Waechter. Gibt die Anzahl der Eingriffe zurueck. */
+/* Waechter-Steuerung zur Ladestation (v2): Wunschgeschwindigkeit zeigt zur Station und wird
+ * kurz davor null; die noetige Beschleunigung ist (v_soll - v)/tau minus Wind. Gewaehlt wird die
+ * der 9 Aktionen (schweben + 8 Richtungen), deren Schub dem am naechsten kommt.
+ * v1 flog stur geradeaus und "schwebte" am Ziel -- schweben haelt aber die Geschwindigkeit,
+ * und Wind schob die Drohnen weg. */
+static uint8_t steer_to_station(const float *r, float diag_m)
+{
+    float d = r[C_ST_D] * diag_m;
+    float speed = (d - APPROACH_OFFSET_M) * APPROACH_GAIN;
+    if (speed < 0.0f) speed = 0.0f;
+    if (speed > V_MAX) speed = V_MAX;
+    float ax = (r[C_ST_DX] * speed - r[C_VX] * V_MAX) / STEER_TAU - r[C_WIND_X] * V_MAX;
+    float ay = (r[C_ST_DY] * speed - r[C_VY] * V_MAX) / STEER_TAU - r[C_WIND_Y] * V_MAX;
+    uint8_t best = RS_ACT_HOVER;
+    float best_e = ax * ax + ay * ay;                 /* schweben = kein eigener Schub */
+    for (int k = 0; k < 8; k++) {
+        float c = cosf((float)M_PI * k / 4.0f) * A_MAX, s = sinf((float)M_PI * k / 4.0f) * A_MAX;
+        float e = (ax - c) * (ax - c) + (ay - s) * (ay - s);
+        if (e < best_e) { best_e = e; best = (uint8_t)(1 + k); }
+    }
+    return best;
+}
+
 static int safety_guard(const rs_obs_t *o, uint8_t *act, uint16_t *n_charging_out)
 {
     int n = o->n_agents, overrides = 0, alive = 0, charging = 0;
@@ -105,9 +134,7 @@ static int safety_guard(const rs_obs_t *o, uint8_t *act, uint16_t *n_charging_ou
     for (int i = 0; i < n; i++) {
         const float *r = o->agents[i];
         if (r[C_ALIVE] < 0.5f || !charging_state[i]) continue;
-        uint8_t a = (r[C_ST_D] * o->diag_m < HOLD_STATION_M)
-                        ? RS_ACT_HOVER
-                        : dir_to_action(r[C_ST_DX], r[C_ST_DY]);
+        uint8_t a = steer_to_station(r, o->diag_m);
         if (a != act[i]) overrides++;
         act[i] = a;
     }
