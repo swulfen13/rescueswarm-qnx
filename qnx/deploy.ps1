@@ -4,13 +4,15 @@
 #   .\deploy.ps1 -Mode ki-ohne    -> KI-Policy OHNE Waechter (Vergleich)
 #   .\deploy.ps1 -Mode regeln     -> einfache Regeln + Waechter
 #   .\deploy.ps1 -Prio 0          -> ohne Echtzeit-Prioritaet (Vergleich Stresstest)
+#   .\deploy.ps1 -Policy policy_stadt.bin  -> andere Policy-Datei (landet auf QNX als policy.bin)
 # Log auf QNX: /tmp/rs/watchdog.log
-param([string]$Ip = (Get-Content (Join-Path $PSScriptRoot "..\vm_ip.txt") -Raw).Trim(), [ValidateSet("ki","ki-ohne","regeln")][string]$Mode = "ki", [int]$Prio = 50)
+param([string]$Ip = (Get-Content (Join-Path $PSScriptRoot "..\vm_ip.txt") -Raw).Trim(), [ValidateSet("ki","ki-ohne","regeln")][string]$Mode = "ki", [int]$Prio = 50, [string]$Policy = "policy.bin")
 $o = @("-i","C:\Users\Admin\qnxvm\qnx_key","-o","StrictHostKeyChecking=no","-o","UserKnownHostsFile=NUL",
        "-o","LogLevel=ERROR","-o","Ciphers=aes128-ctr","-o","MACs=hmac-sha2-256")
 $bin = Join-Path $PSScriptRoot "bin"
 $a = @{ "ki" = "-p policy.bin"; "ki-ohne" = "-p policy.bin -n"; "regeln" = "" }[$Mode]
 if ($Prio -gt 0) { $a = "$a -r $Prio" }
 ssh @o "root@$Ip" "slay -f watchdog 2>/dev/null; slay -f controller 2>/dev/null; slay -f gateway 2>/dev/null; sleep 1; mkdir -p /tmp/rs; cd /tmp/rs; rm -f watchdog controller gateway rtbench hog"
-scp @o "$bin\watchdog" "$bin\controller" "$bin\gateway" "$bin\rtbench" "$bin\hog" (Join-Path $PSScriptRoot "policy.bin") "root@${Ip}:/tmp/rs/"
+scp @o "$bin\watchdog" "$bin\controller" "$bin\gateway" "$bin\rtbench" "$bin\hog" "root@${Ip}:/tmp/rs/"
+scp @o (Join-Path $PSScriptRoot $Policy) "root@${Ip}:/tmp/rs/policy.bin"
 ssh @o "root@$Ip" "cd /tmp/rs && chmod +x watchdog controller gateway rtbench hog && (nohup ./watchdog $a > watchdog.log 2>&1 &) && sleep 2 && cat watchdog.log"
