@@ -1,8 +1,10 @@
 """Wie viel Versorgung ist in Stufe 4 ueberhaupt moeglich? (Uplink-Kapazitaet vs. Bedarf)"""
+import sys
 import torch
 import train_with_guard as tg
 
-mcfg = tg.MissionConfig.load(str(tg.SIM / "netzabdeckung_config.yaml"), stage=4)
+cfg = sys.argv[1] if len(sys.argv) > 1 else str(tg.SIM / "netzabdeckung_config.yaml")
+mcfg = tg.MissionConfig.load(cfg, stage=4)
 for seed in range(6):
     env = tg.NetCovEnv(mcfg, num_envs=1, device="cpu", seed=seed)
     env.reset()

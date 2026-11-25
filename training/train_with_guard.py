@@ -97,7 +97,7 @@ class Guard:
 
 
 def train(args):
-    mcfg = MissionConfig.load(str(SIM / "netzabdeckung_config.yaml"), stage=args.stage)
+    mcfg = MissionConfig.load(args.config, stage=args.stage)
     env = NetCovEnv(mcfg, num_envs=args.envs, device="cpu" if args.cpu else "cuda")
     dev = env.device
     tcfg = TrainConfig()
@@ -227,6 +227,7 @@ def main():
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--name", default=f"guard_{int(time.time())}")
     p.add_argument("--cpu", action="store_true")
+    p.add_argument("--config", default=str(SIM / "netzabdeckung_config.yaml"), help="Missions-Config (z. B. ../scenarios/stadt.yaml)")
     p.add_argument("--steer", default="v2", choices=["v1", "v2"], help="Waechter-Steuerung wie im controller (v2 = wind-kompensiert)")
     train(p.parse_args())
 

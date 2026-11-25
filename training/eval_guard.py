@@ -12,9 +12,10 @@ p = argparse.ArgumentParser()
 p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3])
 p.add_argument("--ckpt", default=str(tg.SIM / "checkpoints" / "netcov_final.pt"))
 p.add_argument("--steps", type=int, default=9000)
+p.add_argument("--config", default=str(tg.SIM / "netzabdeckung_config.yaml"))
 a = p.parse_args()
 
-mcfg = tg.MissionConfig.load(str(tg.SIM / "netzabdeckung_config.yaml"), stage=4)
+mcfg = tg.MissionConfig.load(a.config, stage=4)
 print(f"{'Seed':>4} {'Wind':>5} | {'Waechter':>8} {'versorgt':>8} {'lebend Start':>12} {'lebend Ende':>11} {'Akku':>5}")
 for seed in a.seeds:
     for steer in ("v1", "v2"):

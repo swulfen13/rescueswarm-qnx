@@ -84,6 +84,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=5555)
     p.add_argument("--steps", type=int, default=600)
     p.add_argument("--stage", type=int, default=4)
+    p.add_argument("--config", default=None, help="Missions-Config, Standard: swarm-sim/netzabdeckung_config.yaml; Stadt: scenarios/stadt.yaml")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--timeout-ms", type=float, default=200.0)
     p.add_argument("--csv", default=None, help="Messwerte je Takt als CSV speichern")
@@ -97,7 +98,7 @@ def main() -> None:
     MissionConfig, NetCovEnv = load_sim(sim_dir)
     import torch
 
-    mcfg = MissionConfig.load(str(sim_dir / "netzabdeckung_config.yaml"), stage=args.stage)
+    mcfg = MissionConfig.load(args.config or str(sim_dir / "netzabdeckung_config.yaml"), stage=args.stage)
     env = NetCovEnv(mcfg, num_envs=1, device="cpu", seed=args.seed)
     reserve = env.reserve_pct / 100.0
     diag = math.hypot(env.map_w, env.map_h)

@@ -16,3 +16,4 @@ training/train_tag*.log
 qnx/policy_guardv2.bin
 out/live_frames_test*/
 out/live_test.csv
+training/train_stadt*.log
