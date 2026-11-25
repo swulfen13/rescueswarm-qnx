@@ -142,6 +142,10 @@ powershell -File pc\test_last.ps1        # full swarm loop during CPU hog, norma
   *survival*, not *placement*. Retraining the policy with the guard in the loop
   (`training/train_with_guard.py`, 3000 PPO updates) did **not** clearly beat the original policy on
   QNX (4 seeds: 13.5 vs 13.4 %, 6.9 vs 7.3 %, 17.7 vs 18.4 %, 3.7 vs 3.0 %), so the original policy stays.
+  A second, longer run with guard v2 in the loop (9000 updates) keeps **more drones alive**
+  (seed 2: 20/20 instead of 14/20, mean battery 72 % instead of 45 %) but covers about the same area
+  (14.2 vs 13.7 %, 16.9 vs 18.3 %). Survival is the guard's job, coverage was the goal of retraining –
+  so the original policy stays for now (`qnx/policy_guardv2.bin` is not in the repo, the CSVs are in `out/`).
 * **Strong wind is not survivable in this simulation.** Wind acts as an acceleration of up to
   10 m/s² at the hardest stage, the drones can only push with 5 m/s². When the wind is stronger than
   the drone, a station upwind cannot be reached by any controller – in 2 of 4 test seeds
