@@ -86,17 +86,17 @@ def s1():
         img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
         g = fade_global(t, dur, 0.8, 0.5)
         # Titelphase 0..6 s, dann wandert der Titel nach oben, Problem-Saetze erscheinen
-        k = ease((t - 5.0) / 1.2)
+        k = ease((t - 2.6) / 1.2)
         ty = 430 - 290 * k
         a = ease(t / 1.2) * g
         text(d, (W // 2, ty), "RescueSwarm", font(150, "Bold"), alpha_col(TEXT, a), "mm")
         text(d, (W // 2, ty + 115), "Swarm AI on QNX 8.0", font(48, "Medium"), alpha_col(SKY, a * (1 - 0.0 * k)), "mm")
-        lines = [("Earthquake. Flood.", 6.0), ("Cell towers go down.", 8.0), ("Rescue teams lose contact.", 10.0)]
+        lines = [("Earthquake. Flood.", 3.3), ("Cell towers go dark.", 6.3), ("Rescue teams lose contact.", 8.3)]
         for j, (s, t0) in enumerate(lines):
             aa = ease((t - t0) / 0.8) * g
             text(d, (W // 2, 520 + j * 110), s, font(72, "SemiBold"), alpha_col(TEXT, aa), "mm")
-        aa = ease((t - 13.0) / 0.8) * g
-        text(d, (W // 2, 900), "A drone swarm builds an emergency network – with its brain on QNX.",
+        aa = ease((t - 12.9) / 0.8) * g
+        text(d, (W // 2, 900), "A drone swarm rebuilds the network – with its brain on QNX.",
              font(40, "Medium"), alpha_col(AMBER, aa), "mm")
         w.add(img)
     w.close()
@@ -320,11 +320,11 @@ def s8():
         A = lambda t0: ease((t - t0) / 0.8) * g
         text(d, (W // 2, 230), "QNX 8.0 in a virtual machine · simulated drones · measured numbers",
              font(34, "Medium"), alpha_col(MUTED, A(0.3)), "mm")
-        text(d, (W // 2, 440), "The AI flies.", font(110, "Bold"), alpha_col(TEXT, A(4.5)), "mm")
-        text(d, (W // 2, 580), "QNX keeps it safe.", font(110, "Bold"), alpha_col(AMBER, A(5.8)), "mm")
-        text(d, (W // 2, 780), "RescueSwarm", font(56, "Bold"), alpha_col(TEXT, A(8.0)), "mm")
-        text(d, (W // 2, 860), "github.com/swulfen13/rescueswarm-qnx", font(40, "Medium"), alpha_col(SKY, A(8.0)), "mm")
-        text(d, (W // 2, 930), "open source · MIT", font(30), alpha_col(MUTED, A(8.0)), "mm")
+        text(d, (W // 2, 440), "The AI flies.", font(110, "Bold"), alpha_col(TEXT, A(7.7)), "mm")
+        text(d, (W // 2, 580), "QNX keeps it safe.", font(110, "Bold"), alpha_col(AMBER, A(9.3)), "mm")
+        text(d, (W // 2, 780), "RescueSwarm", font(56, "Bold"), alpha_col(TEXT, A(11.2)), "mm")
+        text(d, (W // 2, 860), "github.com/swulfen13/rescueswarm-qnx", font(40, "Medium"), alpha_col(SKY, A(11.2)), "mm")
+        text(d, (W // 2, 930), "open source · MIT  ·  voice: ElevenLabs", font(30), alpha_col(MUTED, A(11.2)), "mm")
         w.add(img)
     w.close()
 
