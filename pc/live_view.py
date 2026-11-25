@@ -123,7 +123,7 @@ class LiveView:
         hs_t = e.hs_type[0].cpu().numpy()[hs_a]
         hs_d = e.hs_demand[0].cpu().numpy()[hs_a]
 
-        self.links.set_segments(self._links(pos, alive, up, e.dd_range))
+        self.links.set_segments(self._links(pos, alive, up, e.dd_range * max(1.0 - e.min_sig, 0.0) ** 0.5))
         if len(hs):
             self.sc_hs.set_offsets(hs)
             self.sc_hs.set_sizes(80 + 400 * hs_d / max(hs_d.max(), 1e-6))

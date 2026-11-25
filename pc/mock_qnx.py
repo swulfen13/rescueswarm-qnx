@@ -13,6 +13,7 @@ OBS_HDR = struct.Struct("<IIHHff3f")
 ACT_HDR = struct.Struct("<IIHHIIHH")
 C_ALIVE, C_ALT, C_ST_DX, C_ST_DY, C_ST_D, C_GAP_DX, C_GAP_DY, C_GAP_D, C_BATT = 0, 3, 11, 12, 13, 14, 15, 16, 17
 C_VX, C_VY, C_WIND_X, C_WIND_Y = 4, 5, 19, 20
+C_UP_DX, C_UP_DY, C_UP_D, C_CONN = 8, 9, 10, 18
 V_MAX, A_MAX, STEER_TAU, APPROACH_GAIN, APPROACH_OFFSET_M = 15.0, 5.0, 1.5, 0.3, 40.0
 charging = np.zeros(32, dtype=bool)
 
@@ -25,10 +26,14 @@ def dir_to_action(dx, dy):
 
 
 def steer_to_station(r, diag):
-    """Wie steer_to_station() in qnx/controller.c (Waechter v2, wind-kompensiert)."""
-    speed = min(max((r[C_ST_D] * diag - APPROACH_OFFSET_M) * APPROACH_GAIN, 0.0), V_MAX)
-    ax = (r[C_ST_DX] * speed - r[C_VX] * V_MAX) / STEER_TAU - r[C_WIND_X] * V_MAX
-    ay = (r[C_ST_DY] * speed - r[C_VY] * V_MAX) / STEER_TAU - r[C_WIND_Y] * V_MAX
+    return steer_to(r, C_ST_DX, C_ST_DY, C_ST_D, diag)
+
+
+def steer_to(r, ix, iy, idist, diag):
+    """Wie steer_to() in qnx/controller.c (Waechter v2, wind-kompensiert)."""
+    speed = min(max((r[idist] * diag - APPROACH_OFFSET_M) * APPROACH_GAIN, 0.0), V_MAX)
+    ax = (r[ix] * speed - r[C_VX] * V_MAX) / STEER_TAU - r[C_WIND_X] * V_MAX
+    ay = (r[iy] * speed - r[C_VY] * V_MAX) / STEER_TAU - r[C_WIND_Y] * V_MAX
     best, best_e = 0, ax * ax + ay * ay
     for k in range(8):
         c, s = math.cos(math.pi * k / 4) * A_MAX, math.sin(math.pi * k / 4) * A_MAX
@@ -79,6 +84,10 @@ def control(rows, reserve, diag, net=None, safety=True):
     for i in range(n):
         if alive[i] and charging[i]:
             a = steer_to_station(rows[i], diag)
+            ov += int(a != act[i])
+            act[i] = a
+        elif alive[i] and rows[i, C_CONN] < 0.5:      # Funk-Waechter
+            a = steer_to(rows[i], C_UP_DX, C_UP_DY, C_UP_D, diag)
             ov += int(a != act[i])
             act[i] = a
     return act, int(charging[:n].sum()), ov

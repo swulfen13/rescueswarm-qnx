@@ -81,14 +81,14 @@ static uint8_t flight_logic(const float *row, float diag)
  * der 9 Aktionen (schweben + 8 Richtungen), deren Schub dem am naechsten kommt.
  * v1 flog stur geradeaus und "schwebte" am Ziel -- schweben haelt aber die Geschwindigkeit,
  * und Wind schob die Drohnen weg. */
-static uint8_t steer_to_station(const float *r, float diag_m)
+static uint8_t steer_to(const float *r, int ix, int iy, int id, float diag_m)
 {
-    float d = r[C_ST_D] * diag_m;
+    float d = r[id] * diag_m;
     float speed = (d - APPROACH_OFFSET_M) * APPROACH_GAIN;
     if (speed < 0.0f) speed = 0.0f;
     if (speed > V_MAX) speed = V_MAX;
-    float ax = (r[C_ST_DX] * speed - r[C_VX] * V_MAX) / STEER_TAU - r[C_WIND_X] * V_MAX;
-    float ay = (r[C_ST_DY] * speed - r[C_VY] * V_MAX) / STEER_TAU - r[C_WIND_Y] * V_MAX;
+    float ax = (r[ix] * speed - r[C_VX] * V_MAX) / STEER_TAU - r[C_WIND_X] * V_MAX;
+    float ay = (r[iy] * speed - r[C_VY] * V_MAX) / STEER_TAU - r[C_WIND_Y] * V_MAX;
     uint8_t best = RS_ACT_HOVER;
     float best_e = ax * ax + ay * ay;                 /* schweben = kein eigener Schub */
     for (int k = 0; k < 8; k++) {
@@ -97,6 +97,18 @@ static uint8_t steer_to_station(const float *r, float diag_m)
         if (e < best_e) { best_e = e; best = (uint8_t)(1 + k); }
     }
     return best;
+}
+
+static uint8_t steer_to_station(const float *r, float diag_m)
+{
+    return steer_to(r, C_ST_DX, C_ST_DY, C_ST_D, diag_m);
+}
+
+/* Funk-Waechter: eine Drohne ohne Verbindung zum Uplink (auch nicht ueber andere Drohnen)
+ * hilft niemandem -- sie fliegt Richtung Uplink, bis sie wieder im Netz haengt. */
+static uint8_t steer_to_uplink(const float *r, float diag_m)
+{
+    return steer_to(r, C_UP_DX, C_UP_DY, C_UP_D, diag_m);
 }
 
 static int safety_guard(const rs_obs_t *o, uint8_t *act, uint16_t *n_charging_out)
@@ -135,6 +147,13 @@ static int safety_guard(const rs_obs_t *o, uint8_t *act, uint16_t *n_charging_ou
         const float *r = o->agents[i];
         if (r[C_ALIVE] < 0.5f || !charging_state[i]) continue;
         uint8_t a = steer_to_station(r, o->diag_m);
+        if (a != act[i]) overrides++;
+        act[i] = a;
+    }
+    for (int i = 0; i < n; i++) {
+        const float *r = o->agents[i];
+        if (r[C_ALIVE] < 0.5f || charging_state[i] || r[C_CONN] >= 0.5f) continue;
+        uint8_t a = steer_to_uplink(r, o->diag_m);
         if (a != act[i]) overrides++;
         act[i] = a;
     }

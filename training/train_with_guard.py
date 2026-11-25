@@ -41,15 +41,16 @@ CHARGE_START_MARGIN, CHARGE_DONE, MAX_CHARGING_FRAC, HOLD_STATION_M = 0.15, 0.95
 # Wind-Steuerung (v2): Werte aus netzabdeckung_config.yaml (drone.max_geschwindigkeit_ms / max_beschleunigung_ms2)
 V_MAX, A_MAX, STEER_TAU, APPROACH_GAIN, APPROACH_OFFSET = 15.0, 5.0, 1.5, 0.3, 40.0
 SG_WIND_X, SG_WIND_Y, ENT_VX, ENT_VY = 11, 12, 3, 4
+SG_UP_DX, SG_UP_DY, SG_UP_D, SG_CONN = 0, 1, 2, 10
 _DIR9 = torch.tensor([[0.0, 0.0]] + [[math.cos(k * math.pi / 4), math.sin(k * math.pi / 4)] for k in range(8)])
 
 
 class Guard:
     """Vektorisierte Kopie des Sicherheitswaechters aus qnx/controller.c."""
 
-    def __init__(self, E: int, A: int, reserve: float, diag: float, device, steer: str = "v1"):
+    def __init__(self, E: int, A: int, reserve: float, diag: float, device, steer: str = "v1", link: bool = False):
         self.charging = torch.zeros(E, A, dtype=torch.bool, device=device)
-        self.reserve, self.diag, self.steer = reserve, diag, steer
+        self.reserve, self.diag, self.steer, self.link = reserve, diag, steer, link
 
     def reset(self):
         self.charging.zero_()
@@ -79,14 +80,22 @@ class Guard:
             k = torch.round(ang / (math.pi / 4)).long() % 8
             a_guard = torch.where(sg[..., SG_ST_D] * self.diag < HOLD_STATION_M, torch.zeros_like(k), 1 + k)
         out = torch.where(ch, a_guard, action)
+        if self.link:
+            # Funk-Waechter: Drohne ohne Verbindung zum Uplink fliegt Richtung Uplink, bis sie wieder im Netz ist
+            lost = alive & ~ch & (sg[..., SG_CONN] < 0.5)
+            a_link = self._steer(obs, SG_UP_DX, SG_UP_DY, SG_UP_D)
+            out = torch.where(lost, a_link, out)
         return out, ch
 
     def steer_v2(self, obs):
+        return self._steer(obs, SG_ST_DX, SG_ST_DY, SG_ST_D)
+
+    def _steer(self, obs, ix, iy, idist):
         """Wind-kompensierte Steuerung: Wunschgeschwindigkeit zur Station (am Ziel 0),
         benoetigte Beschleunigung = (v_soll - v)/tau - Wind, dann die passendste der 9 Aktionen."""
         sg, ent = obs["self_global"], obs["entities"]
-        u = sg[..., [SG_ST_DX, SG_ST_DY]]
-        d = sg[..., SG_ST_D] * self.diag
+        u = sg[..., [ix, iy]]
+        d = sg[..., idist] * self.diag
         v = ent[..., [ENT_VX, ENT_VY]] * V_MAX
         w = sg[..., [SG_WIND_X, SG_WIND_Y]] * V_MAX
         speed = ((d - APPROACH_OFFSET) * APPROACH_GAIN).clamp(0.0, V_MAX)

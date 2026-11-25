@@ -25,6 +25,7 @@ physics simulation of the swarm.
 | AI **without** safety guard (15 min mission) | swarm drains its batteries together – **all drones down after 10 min, 0 % coverage** |
 | AI **with** QNX safety guard (same seed) | **16 of 16 drones still flying after 15 min**, coverage stable (guard v2) |
 | Network delivered by the swarm (3 scenarios, 15 min each) | **92–100 % of the sites online**, the single uplink used at **100 %** of its capacity |
+| **City scenario** (4×4 km, 3 uplinks, relay chains needed), 4 seeds × 15 min on QNX | demand served **62 % on average (up to 73 %)** vs. 46 % before – city-trained AI + QNX link guard; every drone that started is still flying in 3 of 4 runs |
 | Guard v2 (wind-compensated) vs. v1 (straight line), 4 seeds on QNX | more drones survive in calm/moderate wind (16 vs 14, 14 vs 11); no guard can help when the wind is stronger than the drones (see notes) |
 | 100 Hz control loop vs. CPU hog, **normal** priority | median **392 ms** late, max 764 ms |
 | 100 Hz control loop vs. CPU hog, **SCHED_FIFO 50** | median **4.2 ms** late, max 27 ms (VM floor, see notes) |
@@ -81,6 +82,9 @@ sits between the AI and the drones:
 * below the battery reserve a drone **must** return to charge – the AI is overridden,
 * charging slots are handed out to the lowest batteries first,
 * **never more than 30 % of the swarm charges at the same time,**
+* **link guard:** a drone that has lost its radio path to every uplink (directly or through other
+  drones) is useless to everyone – it flies back towards the nearest uplink until it is part of
+  the network again,
 * the flight to the station is **wind-compensated** (guard v2): the guard picks the thrust direction
   that brings the drone's velocity closest to "towards the station, slowing down on arrival",
   minus the wind. The first version (v1) flew a straight line and "hovered" at the station –
@@ -88,6 +92,23 @@ sits between the AI and the drones:
   next to the charger.
 
 The AI stays fast and flexible, the safety rules stay simple, verifiable and real-time.
+
+### Scenario 2: city (relay chains)
+
+`scenarios/stadt.yaml` is a copy of the swarm-sim mission with a 4 × 4 km map, three surviving network
+nodes (uplinks) and drone-to-drone links of only ~1.25 km – to reach distant shelters and hospitals the
+drones have to form **relay chains**, which you can watch in the live view.
+
+| City, 15 min, demand served (seeds 0–3) | mean |
+|---|---|
+| AI from the disaster scenario + battery guard | 46 % |
+| … + QNX link guard | 54 % |
+| AI trained 12,000 PPO updates in the city (battery guard in the loop) | 50 % |
+| … + **QNX link guard** (measured on QNX) | **62 %** (73 / 51 / 52 / 73 %) |
+
+Neither training alone nor the link guard alone is enough – together they lift served demand by a third.
+The same "AI flies, QNX keeps it safe" split as for the batteries (simulation numbers for the first
+three rows: `training/uplink_use.py`). CSVs: `out/stadt_seed*.csv`.
 
 ---
 
@@ -120,6 +141,8 @@ powershell -File qnx\deploy.ps1                     # copies to /tmp/rs and star
 ```powershell
 python pc\qnx_bridge.py --realtime --live --steps 6000      # 10 minutes at 10 Hz with live view
 python pc\qnx_bridge.py --steps 9000 --csv out\run.csv      # as fast as possible, logged
+# city scenario (deploy the city policy first: qnx\deploy.ps1 -Policy policy_stadt.bin)
+python pc\qnx_bridge.py --config scenarios\stadt.yaml --realtime --live --steps 6000
 ```
 
 ### 4. Tests
