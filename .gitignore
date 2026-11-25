@@ -1,0 +1,9 @@
+qnx/bin/
+__pycache__/
+*.pyc
+out/live_frames/
+vm_ip.txt
+
+qnx/diag.sh
+abgabe/
+
