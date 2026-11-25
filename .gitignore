@@ -18,3 +18,7 @@ out/live_frames_test*/
 out/live_test.csv
 training/train_stadt*.log
 out/live_frames_stadt/
+video/clips/
+video/scenes/
+video/in/
+video/*.mp4

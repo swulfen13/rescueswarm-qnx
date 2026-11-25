@@ -27,11 +27,14 @@ class LiveView:
         from matplotlib.collections import LineCollection
         self.plt = plt
         self.env = env
-        self.every = every
+        # Video-Modus (RS_LIVE_VIDEO=1): 1920x1080, JPEG; RS_LIVE_EVERY = jeder n-te Takt ein Bild
+        self.video = os.environ.get("RS_LIVE_VIDEO") == "1"
+        self.every = int(os.environ.get("RS_LIVE_EVERY", every))
         self.frame = 0
+        self.fb_hold = 0      # Notbetrieb-Hinweis ein paar Bilder stehen lassen (sonst nur 1 Bild sichtbar)
 
         plt.ion()
-        self.fig = plt.figure(figsize=(15, 8.2), facecolor="#0f1117")
+        self.fig = plt.figure(figsize=(16, 9) if self.video else (15, 8.2), facecolor="#0f1117")
         gs = self.fig.add_gridspec(4, 2, width_ratios=[1.25, 1], hspace=0.55, wspace=0.12)
         self.ax_map = self.fig.add_subplot(gs[:, 0])
         self.ax_srv = self.fig.add_subplot(gs[0, 1])
@@ -110,6 +113,8 @@ class LiveView:
         self.cpu.append(compute_us / 1000.0)
         self.fb.append(1.0 if fallback else 0.0)
         self.ov.append(float(overrides))
+        if fallback:
+            self.fb_hold = 25
         if step % self.every:
             return
 
@@ -138,8 +143,9 @@ class LiveView:
             self.sc_dr.set_facecolor(self.plt.cm.RdYlGn(np.clip(b, 0, 1)))
         self.title.set_text(f"t = {tmin:5.1f} min   |   sites online {info.get('linked_pct', 0):3.0f} %   |   "
                             f"uplink used {info.get('uplink_pct', 0):3.0f} %   |   drones {int(alive.sum())}")
-        if fallback:
-            self.badge.set_text("QNX: controller restarting – swarm holds position (fail-safe)")
+        if self.fb_hold > 0:
+            self.fb_hold -= 1
+            self.badge.set_text("QNX: controller killed – swarm holds position – watchdog restarted it")
             self.badge.get_bbox_patch().set_facecolor("#c62828")
         else:
             self.badge.set_text(f"QNX: AI {compute_us/1000:.2f} ms  ·  round trip {rtt_ms:.1f} ms  ·  guard overrides {overrides}")
@@ -156,8 +162,12 @@ class LiveView:
         self.ax_evt.set_ylim(-0.1, max(1.5, max(self.ov) + 0.5))
 
         if self.save_dir:
-            self.fig.savefig(os.path.join(self.save_dir, f"frame_{self.frame:05d}.png"), dpi=80,
-                             facecolor=self.fig.get_facecolor())
+            if self.video:
+                self.fig.savefig(os.path.join(self.save_dir, f"frame_{self.frame:05d}.jpg"), dpi=120,
+                                 facecolor=self.fig.get_facecolor(), pil_kwargs={"quality": 92})
+            else:
+                self.fig.savefig(os.path.join(self.save_dir, f"frame_{self.frame:05d}.png"), dpi=80,
+                                 facecolor=self.fig.get_facecolor())
         else:
             self.fig.canvas.draw_idle()
             self.fig.canvas.flush_events()
